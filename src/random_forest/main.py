@@ -128,11 +128,9 @@ def quit_columns(rosette, args, columns):
     y = [mass for [_, mass, _, _, _, _, _, _] in rosette]
     index_i = [index for name, index in columns.items()]
     if args.change_data:
+        x = [[row[i] for i in sorted(index_i[:-1])] for row in rosette]
         if args.add_rand_col:
-            x = [[row[i] for i in sorted(index_i[:-1])] for row in rosette]
             x = add_rand_column(x)
-        else:
-            x = [[row[i] for i in sorted(index_i[:-1])] for row in rosette]
     else:
         x = [[flux_g, flux_r, flux_z, flux_w1, flux_w2, z] for [_, _, flux_g, flux_r, flux_z, flux_w1, flux_w2, z] in rosette]
     return x, y, index_i
