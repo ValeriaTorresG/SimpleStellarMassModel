@@ -4,11 +4,15 @@ This project provides a straightforward approach to estimating stellar masses fo
 
 The project employs measurements from the Dark Energy Spectroscopic Instrument (DESI) to develop and validate a model.
 
-## Contents
-- **Data Processing**: Scripts for cleaning and preparing the DESI data.
-- **Modeling**: Implementation of multiple linear regression and random forest regression models to estimate stellar masses.
-- **Results**: Code to reproduce the figures and results from the analysis.
-- **Documentation**: Detailed documentation on how to use the provided scripts and data.
+## Repository Structure
+
+- **data/**: Directory for storing input data files and model outputs.
+- **doc/**: Documentation related to data sources and model descriptions.
+- **job_management/**: Scripts and logs for managing batch jobs and model runs.
+- **plots/**: Generated plots and visualizations from model outputs.
+- **src/**: Source code for the models.
+  - **linear/**: Linear regression model scripts.
+  - **random_forest/**: Random forest model scripts including optimization.
 
 ## Links
 - [DESI Data](https://data.desi.lbl.gov/public/)
