@@ -14,7 +14,7 @@ The project employs measurements from the Dark Energy Spectroscopic Instrument (
   - **linear/**: Linear regression model scripts.
   - **random_forest/**: Random forest model scripts including optimization.
 
-## Links
+## Data and documentation
 - [DESI Data](https://data.desi.lbl.gov/public/)
 - [DESI Early Data Release (EDR)](https://arxiv.org/abs/2306.06308)
 - [Bright Galaxy Survey (BGS) Information](https://arxiv.org/abs/2208.08512)
