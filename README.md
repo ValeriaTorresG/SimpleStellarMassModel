@@ -16,5 +16,6 @@ The project employs measurements from the Dark Energy Spectroscopic Instrument (
 
 ## Data and documentation
 - [DESI Data](https://data.desi.lbl.gov/public/)
+- [DESI Data Documentation](https://data.desi.lbl.gov/doc/)
 - [DESI Early Data Release (EDR)](https://arxiv.org/abs/2306.06308)
 - [Bright Galaxy Survey (BGS) Information](https://arxiv.org/abs/2208.08512)
