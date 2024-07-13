@@ -115,7 +115,6 @@ def plot_results(rosette_id, masses, pred, train_rosettes, test_size):
 
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'plots', 'linear'))
     now = datetime.now()
-    print(base_dir)
     fl = now.strftime('%Y-%m-%d_%H-%M-%S')
     file_name = f'pred_{fl}.png'
     plt.savefig(os.path.join(base_dir, file_name))
