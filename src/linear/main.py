@@ -7,6 +7,7 @@ import logging
 import os
 
 import matplotlib
+import seaborn as sns
 import matplotlib.pyplot as plt
 plt.rcParams['figure.dpi'] = 360
 matplotlib.rcParams['text.usetex'] = True
@@ -102,13 +103,13 @@ def plot_results(rosette_id, masses, pred, train_rosettes, test_size):
     norm = (dif-np.min(dif))/(np.max(dif)-np.min(dif))
     color_values = 1-norm
 
-    fig, ax = plt.subplots(figsize=(8,7))
-    cmap = plt.get_cmap('viridis')
+    fig, ax = plt.subplots(figsize=(8,6))
+    cmap = sns.color_palette("mako", as_cmap=True)
     scatter = ax.scatter(masses, pred, c=color_values, cmap=cmap, s=5.5)
     ax.plot(masses, fit, color='black', ls='--', linewidth=1)
     ax.set_ylabel('Prediction')
     ax.set_xlabel('Data')
-    ax.set_aspect('equal')
+    #ax.set_aspect('equal')
     plt.title(f'Rosette {rosette_id} - ' + r'$\log M_{*}$ (Linear)', y=1.03)
     plt.colorbar(scatter, ax=ax, label='Proximity to Fit', pad=0.07)
     plt.grid(True)
@@ -117,7 +118,7 @@ def plot_results(rosette_id, masses, pred, train_rosettes, test_size):
     now = datetime.now()
     fl = now.strftime('%Y-%m-%d_%H-%M-%S')
     file_name = f'pred_{fl}.png'
-    plt.savefig(os.path.join(base_dir, file_name))
+    plt.savefig(os.path.join(base_dir, file_name), dpi=360)
     plt.close()
 
 

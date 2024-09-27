@@ -13,6 +13,7 @@ import csv
 import os
 
 import matplotlib
+import seaborn as sns
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 plt.rcParams['figure.dpi'] = 360
@@ -194,30 +195,32 @@ def plot(model, x, y, columns, quit_columns, args, r):
         dif = np.abs(pred - fit)
         color_values = 1 - (dif - np.min(dif)) / (np.max(dif) - np.min(dif))
 
-        fig, ax = plt.subplots(figsize=(8,7))
-        cmap = plt.get_cmap('viridis')
+        fig, ax = plt.subplots(figsize=(8,6))
+        cmap = sns.color_palette("mako", as_cmap=True)
         scatter = ax.scatter(y, pred, c=color_values, cmap=cmap, s=5.5)
         ax.plot(y, fit, color='black', ls='--', linewidth=1)
         ax.set_ylabel('Prediction')
         ax.set_xlabel('Data')
-        ax.set_aspect('equal')
+        #ax.set_aspect('equal')
         plt.colorbar(scatter, ax=ax, label='Proximity to Fit', pad=0.07)
         plt.grid(True)
 
         drop_info = 'Excluding ' + ', '.join(quit_columns) if quit_columns else ''
         plt.title(f'Rosette {r} - $\\log M_{{*}}$ (Random Forest)\n{drop_info}', y=1.03)
         plot_path = prepare_plot_path('pred', drop_info)
-        plt.savefig(plot_path)
+        plt.savefig(plot_path, dpi=360)
         plt.close(fig)
 
     def plot_shap_values(x, y, columns, quit_columns, model, args, r):
         _, x_test, _, _ = train_test_split(x, y, test_size=args.test_size)
         new_x_test = pd.DataFrame(x_test, columns=[col for col in columns if col not in quit_columns])
+        #feature_names = [r'$FLUX \thinspace G$', r'$FLUX \thinspace R$', r'$FLUX \thinspace Z$', r'$FLUX \thinspace W1$', r'$FLUX \thinspace W2$', r'$Z$', 'Random']
+        #new_x_test.columns = feature_names
         explainer = shap.Explainer(model.model, new_x_test)
         shap_values = explainer(new_x_test)
 
         fig, ax = plt.subplots()
-        shap.plots.beeswarm(shap_values, color=cm.viridis, plot_size=(9,5), show=False)
+        shap.plots.beeswarm(shap_values, color=sns.color_palette("mako", as_cmap=True), plot_size=(9,5), show=False)
         fig.tight_layout(pad=3)
 
         drop_info = 'Excluding ' + ', '.join(quit_columns) if quit_columns else ''

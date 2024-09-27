@@ -8,8 +8,9 @@ import numpy as np
 import logging
 import csv
 
-import matplotlib.pyplot as plt
 import matplotlib
+import seaborn as sns
+import matplotlib.pyplot as plt
 plt.rcParams['figure.dpi'] = 360
 matplotlib.rcParams['text.usetex'] = True
 
@@ -121,7 +122,7 @@ class RandomForestModel:
         """
         importances = self.model.feature_importances_
         std = np.std([tree.feature_importances_ for tree in self.model.estimators_], axis=0)
-        cmap = plt.get_cmap('viridis')
+        cmap = sns.color_palette("mako", as_cmap=True)
         colors = cmap(importances/importances.max())  # normalize importances for cmap
         fig, ax = plt.subplots(figsize=(8, 5))
         bars = ax.bar(feature_names, importances, yerr=std, color=colors, capsize=5)
