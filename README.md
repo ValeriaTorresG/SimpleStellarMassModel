@@ -4,6 +4,8 @@ This project provides a straightforward approach to estimating stellar masses fo
 
 The project employs measurements from the Dark Energy Spectroscopic Instrument (DESI) to develop and validate a model.
 
+---
+
 ## Repository Structure
 
 - **data/**: Directory for storing input data files and model outputs.
@@ -13,6 +15,23 @@ The project employs measurements from the Dark Energy Spectroscopic Instrument (
 - **src/**: Source code for the models.
   - **linear/**: Linear regression model scripts.
   - **random_forest/**: Random forest model scripts including optimization.
+
+---
+
+## Dependencies
+
+Requires **Python 3** and the following main libraries:
+
+- `numpy`  
+- `pandas`  
+- `matplotlib`  
+- `seaborn`  
+- `scikit-learn`  
+- `scipy`  
+- `shap` (for SHAP value analysis)  
+- `optuna` (for hyperparameter tuning)
+
+---
 
 ## Data and documentation
 - [DESI Data](https://data.desi.lbl.gov/public/)
