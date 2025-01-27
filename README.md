@@ -22,6 +22,8 @@ The project employs measurements from the Dark Energy Spectroscopic Instrument (
 
 Requires **Python 3** and the following main libraries:
 
+`pip install -r requirements.txt`
+
 - `numpy`  
 - `pandas`  
 - `matplotlib`  
