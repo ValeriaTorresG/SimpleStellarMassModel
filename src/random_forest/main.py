@@ -24,33 +24,48 @@ logging.getLogger('shap').setLevel(logging.WARNING)
 def setup_logging():
     """
     Sets up a centralized logging system for the entire application.
-
-    Creates a directory for logs if it doesn't exist and configures logging settings.
-
-    Returns:
-        logging.Logger: A logger object configured to write to 'random_forest.log' in the specified logs directory.
     """
-    log_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'job_management', 'logs'))
-    logging.basicConfig(
-        filename=os.path.join(log_dir, 'random_forest.log'),
-        level=logging.INFO,
-        format='%(asctime)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S')
+    log_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), '..', '..', 'job_management', 'logs')
+    )
+    os.makedirs(log_dir, exist_ok=True)
+
+    logging.basicConfig(filename=os.path.join(log_dir, 'random_forest.log'),
+                        level=logging.INFO,
+                        format='%(asctime)s - %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S')
     return logging.getLogger('random_forest')
 
 
-def read_csv(filename):
-    """
-    Reads numerical data from a CSV file and preprocesses it for model usage.
+def configure_args():
+    parser = argparse.ArgumentParser(description='Model training and evaluation on rosettes data')
+    parser.add_argument('--train_rosettes', type=str, required=True,
+                        help='Comma-separated list of rosettes IDs for training')
+    parser.add_argument('--test_rosettes', type=str, required=False, default='',
+                        help='Comma-separated list of rosettes IDs for testing')
+    parser.add_argument('--test_size', type=float, required=False, default=0.2,
+                        help='Proportion of the dataset for internal validation (0.0 means no split)')
+    parser.add_argument('--change_data', type=str, required=False, default='',
+                        help='Columns to remove from training, e.g., flux_r,flux_g, etc.')
+    parser.add_argument('--optimize', action='store_true', required=False, default=False,
+                        help='Optimize hyperparameters using Optuna')
+    parser.add_argument('--add_rand_col', action='store_true', required=False, default=False,
+                        help='Include a random column in the dataset')
+    parser.add_argument('--plot', action='store_true', required=False, default=False,
+                        help='Enable plotting of results (predictions)')
+    parser.add_argument('--feat_imp', action='store_true', required=False, default=False,
+                        help='Enable plotting of feature importances')
+    parser.add_argument('--shap', action='store_true', required=False, default=False,
+                        help='Enable plotting of SHAP values')
+    return parser.parse_args()
 
-    Parameters:
-        filename (str): The path to the CSV file to be read.
+
+def read_csv_file(filename):
+    """
+    Reads numerical data from a CSV file, converting fluxes to magnitudes.
 
     Returns:
-        list: A list of lists, each containing numerical data from one row of the CSV.
-
-    Raises:
-        IOError: If the file cannot be read or processed.
+        list: Each row is [id, mass, mag_r, mag_g, mag_z, mag_w1, mag_w2, redshift]
     """
     rosette = []
     try:
@@ -60,128 +75,83 @@ def read_csv(filename):
                 if row:
                     values = list(row.values())
                     n = [float(values[0]), float(values[1])]
-                    n.extend(22.5 - 2.5 * np.log10([float(v) for v in values[2:-1]]))
+                    fluxes = [float(v) for v in values[2:-1]]
+                    mags = 22.5 - 2.5 * np.log10(fluxes)
+                    n.extend(mags)
                     n.append(float(values[-1]))
                     rosette.append(n)
     except Exception as e:
-        raise IOError(f'Failed to read or process the file {filename}: {e}')
+        raise IOError(f'Failed to read or process file {filename}: {e}')
     return rosette
 
 
-def configure_args():
-    """
-    Configures the command-line argument parser for the application.
-
-    Specifies the necessary command-line arguments needed for running the model training and evaluation.
-
-    Returns:
-        argparse.Namespace: An object containing all the command-line arguments parsed according to the specifications.
-    """
-    parser = argparse.ArgumentParser(description='Model training and evaluation on rosettes data')
-    parser.add_argument('--train_rosettes', type=str, required=True,
-                        help='Comma-separated list of rosettes IDs for training')
-    parser.add_argument('--test_rosettes', type=str, required=False, default='',
-                        help='Comma-separated list of rosettes IDs for testing, if any')
-    parser.add_argument('--test_size', type=float, required=False, default=0.8,
-                        help='Proportion of the dataset to include in the test split')
-    parser.add_argument('--change_data', type=str, required=False, default='',
-                        help='Columns to take out of the training, i.e., flux_r,flux_g,flux_z,flux_w1,flux_w2,z')
-    parser.add_argument('--optimize', action='store_true', required=False, default=True,
-                        help='Optimize hyperparameters using Optuna')
-    parser.add_argument('--add_rand_col', action='store_true', required=False, default=False,
-                        help='Include a random column in the dataset')
-    parser.add_argument('--plot', action='store_true', required=False, default=False,
-                        help='Enable plotting of results')
-    parser.add_argument('--feat_imp', action='store_true', required=False, default=False,
-                        help='Enable plotting of feature importances')
-    parser.add_argument('--shap', action='store_true', required=False, default=False,
-                        help='Enable plotting of shap values')
-    return parser.parse_args()
-
-
-def add_rand_column(x):
+def add_rand_column(X):
     """
     Appends a column of random values to a list of data rows.
-
-    Parameters:
-        x (list of list): The existing dataset where each inner list represents a data row.
-
-    Returns:
-        list: The modified dataset with an additional column of random values.
     """
-    random_column = np.random.rand(len(x))
-    [x[i].append(random_column[i]) for i in range(len(x))]
-    return x
+    random_col = np.random.rand(len(X))
+    for i in range(len(X)):
+        X[i].append(random_col[i])
+    return X
 
 
-def quit_columns(rosette, args, columns):
+def load_and_concatenate(rosettes_list, base_path):
     """
-    Filters out specified columns from the dataset based on user-defined arguments.
-
-    Parameters:
-        rosette (list): Data loaded from a CSV, expected to be a list of lists.
-        args (argparse.Namespace): Parsed command-line arguments that may specify columns to exclude.
-        columns (dict): Mapping of column names to their indices in the data rows.
-
-    Returns:
-        tuple: Contains processed feature vectors (x), target variable vector (y), and indices of used columns (index_i).
+    Loads and concatenates data from each rosette ID in `rosettes_list`.
+    Returns a single list of rows (each row is [id, mass, mag_r, mag_g, mag_z, mag_w1, mag_w2, z]).
     """
-    y = [mass for [_, mass, _, _, _, _, _, _] in rosette]
-    index_i = [index for name, index in columns.items()]
-    if args.change_data:
-        x = [[row[i] for i in sorted(index_i[:-1])] for row in rosette]
-        if args.add_rand_col:
-            x = add_rand_column(x)
-    else:
-        x = [[flux_g, flux_r, flux_z, flux_w1, flux_w2, z] for [_, _, flux_g, flux_r, flux_z, flux_w1, flux_w2, z] in rosette]
-    return x, y, index_i
+    all_rows = []
+    for r in rosettes_list:
+        path = os.path.join(base_path, f'rosette{r}.csv')
+        data = read_csv_file(path)
+        all_rows.extend(data)
+    return all_rows
 
 
-def train(path, train_rosettes, model, index_i, test_size, random):
+def quit_columns(rosette, remove_cols, columns_dict):
     """
-    Trains a Random Forest regressor model using data from specified rosettes.
+    Removes specified columns from rosette data. Also extracts X and y.
 
-    Parameters:
-        path (str): Base directory path where data files are stored.
-        train_rosettes (list of int): Identifiers for rosettes to train on.
-        model (RandomForestModel): The model instance to train.
-        index_i (list of int): Indices of features to be used from the data.
-        test_size (float): Proportion of data to hold out as a test set.
-        random (bool): Flag to determine if a random column should be added.
+    rosette: list of rows [id, mass, mag_r, mag_g, mag_z, mag_w1, mag_w2, z]
+    remove_cols: e.g. ['flux_r', 'flux_g'] but you must map them to actual indexes
+    columns_dict: e.g. {'flux_r':2,'flux_g':3,'flux_z':4,'flux_w1':5,'flux_w2':6,'z':7}
 
-    Description:
-        Iteratively processes each specified rosette, loads data, modifies it if necessary, and performs model training.
+    Returns (X, y, indices_used).
     """
-    for r in train_rosettes:
-        rosette_path = os.path.join(path, f'rosette{r}.csv')
-        rosette = model.read_csv(rosette_path)
-        y = [n[1] for n in rosette]
-        if random:
-            x = [[row[i] for i in sorted(index_i[:-1])] for row in rosette]
-            x = add_rand_column(x)
-        else:
-            x = [[row[i] for i in sorted(index_i)] for row in rosette]
-        model.train(r, x, y, test_size)
+    keep_indices = []
+    for name, idx in columns_dict.items():
+        if name not in remove_cols:
+            keep_indices.append(idx)
+
+    X = []
+    y = []
+    for row in rosette:
+        y.append(row[1])  # mass
+        feats = [row[i] for i in keep_indices]
+        X.append(feats)
+    return X, y, keep_indices
 
 
 def plot(model, x, y, columns, quit_columns, args, r):
     """
-    Handles the plotting of predictions and SHAP values based on the trained model and user specifications.
+    Handles the plotting of predictions and SHAP values based on the trained model and user specs.
 
     Parameters:
-        model (RandomForestModel): The trained model to use for predictions and SHAP analysis.
-        x (list): Feature data used for making predictions.
-        y (list): Actual target values used for comparison.
-        columns (dict): Dictionary mapping of data columns.
-        quit_columns (list): List of columns that have been removed from the data.
-        args (argparse.Namespace): Command-line arguments to determine which plots to generate.
-        r (int): Roosette number.
+        model (RandomForestModel): The trained model.
+        x (list): Feature data for plotting.
+        y (list): Target values (masses).
+        columns (dict): Mapping of feature names to their indexes.
+        quit_columns (list): Columns excluded from training.
+        args (Namespace): Command-line arguments.
+        r (int): Rosette number (for naming plots).
 
     Description:
-        Generates and saves prediction plots and SHAP value plots as specified by the user.
+        - Generates prediction plots (true vs. predicted).
+        - Generates SHAP beeswarm plots (if requested).
     """
     def prepare_plot_path(suffix, drop_info=''):
-        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'plots', 'random_forest'))
+        base_dir = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), '..', '..', 'plots', 'random_forest'))
         os.makedirs(base_dir, exist_ok=True)
         now = datetime.now()
         fl = now.strftime('%Y-%m-%d_%H-%M-%S')
@@ -193,15 +163,15 @@ def plot(model, x, y, columns, quit_columns, args, r):
         slope, intercept = np.polyfit(y, pred, 1)
         fit = slope * np.array(y) + intercept
         dif = np.abs(pred - fit)
-        color_values = 1 - (dif - np.min(dif)) / (np.max(dif) - np.min(dif))
+        rng = (np.max(dif) - np.min(dif)) or 1e-12
+        color_values = 1 - (dif - np.min(dif)) / rng
 
-        fig, ax = plt.subplots(figsize=(8,6))
+        fig, ax = plt.subplots(figsize=(8, 6))
         cmap = sns.color_palette("mako", as_cmap=True)
         scatter = ax.scatter(y, pred, c=color_values, cmap=cmap, s=5.5)
         ax.plot(y, fit, color='black', ls='--', linewidth=1)
         ax.set_ylabel('Prediction')
         ax.set_xlabel('Data')
-        #ax.set_aspect('equal')
         plt.colorbar(scatter, ax=ax, label='Proximity to Fit', pad=0.07)
         plt.grid(True)
 
@@ -212,21 +182,24 @@ def plot(model, x, y, columns, quit_columns, args, r):
         plt.close(fig)
 
     def plot_shap_values(x, y, columns, quit_columns, model, args, r):
-        _, x_test, _, _ = train_test_split(x, y, test_size=args.test_size)
-        new_x_test = pd.DataFrame(x_test, columns=[col for col in columns if col not in quit_columns])
-        #feature_names = [r'$FLUX \thinspace G$', r'$FLUX \thinspace R$', r'$FLUX \thinspace Z$', r'$FLUX \thinspace W1$', r'$FLUX \thinspace W2$', r'$Z$', 'Random']
-        #new_x_test.columns = feature_names
+        _, x_test, _, _ = train_test_split(x, y, test_size=args.test_size, random_state=42)
+        feature_cols = [col for col in columns if col not in quit_columns]
+        new_x_test = pd.DataFrame(x_test, columns=feature_cols)
+
         explainer = shap.Explainer(model.model, new_x_test)
         shap_values = explainer(new_x_test)
 
         fig, ax = plt.subplots()
-        shap.plots.beeswarm(shap_values, color=sns.color_palette("mako", as_cmap=True), plot_size=(9,5), show=False)
+        shap.plots.beeswarm(shap_values,
+                            color=sns.color_palette("mako", as_cmap=True),
+                            plot_size=(9, 5),
+                            show=False)
         fig.tight_layout(pad=3)
 
         drop_info = 'Excluding ' + ', '.join(quit_columns) if quit_columns else ''
         plt.title(f'Rosette {r} - SHAP Values\n{drop_info}')
         plot_path = prepare_plot_path('shap', drop_info)
-        plt.savefig(plot_path)
+        plt.savefig(plot_path, dpi=360)
         plt.close(fig)
 
     if args.plot:
@@ -236,76 +209,89 @@ def plot(model, x, y, columns, quit_columns, args, r):
         plot_shap_values(x, y, columns, quit_columns, model, args, r)
 
 
-def test(path, test_rosettes, model, index_i, columns, quit_col, args):
+def test_model_on_rosettes(model, test_rosettes, base_path, columns_dict, quit_cols, add_rand, args):
     """
-    Evaluates a trained RandomForestModel using data from specified test rosettes.
-
-    Parameters:
-        path (str): Directory path where data files are stored.
-        test_rosettes (list of int): Identifiers for rosettes to be used for testing.
-        model (RandomForestModel): The model to use for evaluation.
-        index_i (list of int): Indices of the features included in the model.
-        columns (dict): Mapping of column names to indices.
-        quit_col (list): Columns excluded from the model training.
-        args (argparse.Namespace): Command-line arguments specifying additional functionalities like plotting.
-
-    Description:
-        Processes test data, applies the model to generate predictions, evaluates these predictions, and optionally generates plots.
+    Evaluate the trained model on each rosette in test_rosettes.
+    Calls 'plot()' to generate the desired predictions/SHAP plots if enabled.
     """
     for r in test_rosettes:
-        rosette_path = os.path.join(path, f'rosette{r}.csv')
-        rosette = model.read_csv(rosette_path)
-        y = [n[1] for n in rosette]
-        if args.add_rand_col:
-            x = [[row[i] for i in sorted(index_i[:-1])] for row in rosette]
-            x = add_rand_column(x)
-        else:
-            x = [[row[i] for i in sorted(index_i)] for row in rosette]
-        metrics = model.score(x, y)
+        path = os.path.join(base_path, f'rosette{r}.csv')
+        rosette_data = read_csv_file(path)
+
+        X_temp, y_temp, _ = quit_columns(rosette_data, quit_cols, columns_dict)
+        if add_rand:
+            X_temp = add_rand_column(X_temp)
+
+        metrics = model.score(X_temp, y_temp)
         print(f'Metrics for rosette {r}: {metrics}')
+
         if args.plot or args.shap:
-            plot(model, x, y, columns, quit_col, args, r)
+            plot(model, X_temp, y_temp, columns_dict, quit_cols, args, r)
 
 
 def main():
     args = configure_args()
-    train_rosettes = [int(r) for r in args.train_rosettes.split(',')]
-    test_rosettes = [int(r) for r in args.test_rosettes.split(',') if r]
-    quit_col = [str(col) for col in args.change_data.split(',') if col]
-    path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'data'))
-    columns = {'flux_r':2,'flux_g':3,'flux_z':4,'flux_w1':5,'flux_w2':6,'z':7}
-
-    x, y, index_i = quit_columns(read_csv(os.path.join(path, f'rosette{train_rosettes[0]}.csv')), args, columns)
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=args.test_size, random_state=42)
-    optimizer = ModelOptimization(x_train, y_train, x_test, y_test)
     logger = setup_logging()
 
-    if quit_col:
-        index_i = [index for name, index in columns.items() if name not in quit_col]
+    columns_dict = {'mag_r': 2, 'mag_g': 3,
+                    'mag_z': 4, 'mag_w1':5,
+                    'mag_w2':6, 'z':7}
+
+    train_list = [int(x) for x in args.train_rosettes.split(',')]
+    test_list = [int(x) for x in args.test_rosettes.split(',')] if args.test_rosettes else []
+    quit_cols = [c.strip() for c in args.change_data.split(',') if c.strip()]
+
+    base_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), '..', '..', 'data'))
+
+    all_rows = load_and_concatenate(train_list, base_path)
+    X_all, y_all, used_indices = quit_columns(all_rows, quit_cols, columns_dict)
     if args.add_rand_col:
-        columns['Random'] = 8
-        index_i.append(index_i[-1]+1)
+        X_all = add_rand_column(X_all)
 
-    if args.optimize:
-        optimizer.create_study(n_trials=10)
-        model = RandomForestModel(optimizer.best_params, logger)
-        model.logger.info({'quit':args.change_data,'best_param':optimizer.best_params, 'best_values':optimizer.best_value})
-        print(f'Optuna best param:{optimizer.best_params}, best values:{optimizer.best_value}')
+    if args.test_size > 0:
+        X_train, X_val, y_train, y_val = train_test_split(X_all, y_all,
+                                                          test_size=args.test_size,
+                                                          random_state=42)
     else:
-        model = RandomForestModel(optimizer.best_params, logger)
+        X_train, y_train = X_all, y_all
+        X_val, y_val = [], []
 
-    train(path, train_rosettes, model, index_i, args.test_size, args.add_rand_col)
-    if test_rosettes:
-        test(path, test_rosettes, model, index_i, columns, quit_col, args)
+    best_params = {'n_estimators':100, 'random_state':42}
+    if args.optimize:
+        if len(X_val) == 0:
+            print("[WARNING] test_size=0.0 but optimization is True. "
+                  "Optuna might rely on cross-validation in optimization.py or produce less reliable results.")
+        optimizer = ModelOptimization(X_train, y_train, X_val, y_val)
+        optimizer.create_study(n_trials=10)
+        best_params = optimizer.best_params
+        print(f'Optuna best params: {best_params}, best value: {optimizer.best_value}')
+
+    model = RandomForestModel(best_params, logger)
+    model.train(r='combined', x_train=X_train, y_train=y_train, test_size=0.2)
+
+    if len(X_val) > 0:
+        val_metrics = model.score(X_val, y_val)
+        print("[Internal Validation]", val_metrics)
+
+    if test_list:
+        test_model_on_rosettes(model, test_list, base_path, columns_dict, quit_cols, args.add_rand_col, args)
 
     if args.feat_imp:
-        feature_names = [col for col in columns if col not in quit_col]
+        feat_names = []
+        sorted_cols = sorted(columns_dict.items(), key=lambda x: x[1])
+        for name, idx in sorted_cols:
+            if name not in quit_cols and idx in used_indices:
+                feat_names.append(name)
+        if args.add_rand_col:
+            feat_names.append("Random")
+
         now = datetime.now()
         fl = now.strftime('%Y-%m-%d_%H-%M-%S')
-        file_name = f'features_{fl}.png'
-        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'plots', 'random_forest'))
-        plot_path = os.path.join(base_dir, file_name)
-        model.plot_feature_importances(feature_names, plot_path)
+        out_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'plots', 'random_forest'))
+        os.makedirs(out_dir, exist_ok=True)
+        path_imp = os.path.join(out_dir, f'feature_importances_{fl}.png')
+        model.plot_feature_importances(feat_names, path_imp)
 
 
 if __name__ == '__main__':

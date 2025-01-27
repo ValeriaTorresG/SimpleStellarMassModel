@@ -7,7 +7,7 @@ python job_management/write_data.py --fits_path '../data/BGS_ANY_N_clustering.da
         #--test_rosettes <(optional)rosettes to test>
         #--test_size <(optional, default=0.8) test size to evaluate>
         #--plot <(optional) sets true for plotting predictions>
-python src/linear/main.py --train_rosettes '3,6,7' --test_rosettes '13' --test_size 0.8 --plot
+python src/linear/main.py --train_rosettes '3,11,18' --test_rosettes '13,19' --test_size 0.2 --plot
 
 #? Run Random Forest model
 #python ../src/random_forest/main.py --train_rosettes <rosettes for training>
@@ -18,4 +18,4 @@ python src/linear/main.py --train_rosettes '3,6,7' --test_rosettes '13' --test_s
         #--optimize <(optional) sets true for optimizing hyperparameters>
         #--add_rand_col <(optional) sets true for adding a random column in the model>
         #--feat_imp <(optional) sets true for plotting feature importances>
-python src/random_forest/main.py --train_rosettes '12,15,13' --test_rosettes '19,3,7,18' --plot --shap --optimize --change_data 'z' --add_rand_col --feat_imp
+python src/random_forest/main.py --train_rosettes '7,15,3' --test_rosettes '19,3,6,11' --plot --shap --optimize --change_data 'z' --add_rand_col --feat_imp
